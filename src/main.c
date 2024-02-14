@@ -167,7 +167,7 @@ int main(void) {
     timestamp = lsl_pull_sample_str(inlet, &curr_marker, 1, 0, &errcode);
 
     // Iterate over the predefined markers
-    int j = i % NUM_MARKERS;
+    int j = (i / 20) % NUM_MARKERS;
     struct stimulus *curr_stim = &stimuli[j];
 
     SDL_RenderClear(ren);

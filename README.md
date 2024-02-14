@@ -63,6 +63,8 @@ If you use `make run` and the compilation is successful, you will see a lot of o
 
 ## What you should see
 
+![example](./assets/sample.gif)
+
 ## Explaining the example
 
 A good first start would be to look into `./src/test.c` which is an even simpler example of how a `png` can be rendered to a window using `SDL2`. Once you understood the general setup of starting a `window` a `renderer` and a `texture` and how to render that texture to the window, you can look into `./src/main.c` which extends this using multiple `textures` and adds both an LSL inlet and outlet.
