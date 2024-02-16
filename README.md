@@ -1,19 +1,17 @@
 # C SDL2 Example
 
-This is an example/strawmen for how to use C and SDL2 to create simple text and image rendering with [LSL](https://labstreaminglayer.readthedocs.io/) connections.
+This is an example/straw men for how to use C and SDL2 to create simple text and image rendering with [LSL](https://labstreaminglayer.readthedocs.io/) connections.
 It gives a first idea of how one could implement a module that can later be used within the [Dareplane](https://github.com/bsdlab/Dareplane) framework as part of a closed-loop implementation. The closed-loop capability is realized by listening to an LSL stream and changing the behaviour depending on a specific marker within that stream.
 
-**Note**: Currently this example does not contain a TCP server for making it a standalone Dareplane module. Such a server could be realized in python, which would then call the compiled `c` code in `./build/run_main` as a subprocess. A standalone `c` implementation of such a server will follow.
-
 ## Build
+
+We first focus on a simple example of building an executable which uses SDL2 to display text and an image, while listening to an incoming LSL stream and outputting to another LSL stream. The source code for this example can be found in `./src/examples/main_paradigm.c`. The actual programme under `./src/*.c` will then add a TCP server to implement the Dareplane logic of processing primary commands. Lets start of simple though an deal with the server and threading later.
 
 The example is build using plain `make` and `gcc` and it is assumed that these tools are installed. The following command should be sufficient to build the example:
 
 ```sh
-make
+make paradigm
 
-# or this to also run the example
-make run
 ```
 
 The current `Makefile` is created from a MacOS environment with SDL2 and LSL installed via homebrew. It might need to be adapted for other systems.
@@ -57,9 +55,9 @@ lrwxr-xr-x@   1 matthias.dold  admin     39 Jun  6  2023 liblsl.2.dylib -> ../Ce
 lrwxr-xr-x@   1 matthias.dold  admin     37 Jun  6  2023 liblsl.dylib -> ../Cellar/lsl/1.16.2/lib/liblsl.dylib
 ```
 
-### Running the main
+### Running the examples/main_paradigm
 
-If you use `make run` and the compilation is successful, you will see a lot of output from the created LSL outlet. Furthermore, the program will display a message with `Waiting fro LSL Stream: MyParadigmIncoming`. Use the python script provided under `./testing/run_incoming_lsl.py` to spawn such an LSL stream. This requires the `pylsl` module for python. Note that you can simply keep this running while you tryout modifications on the `c` code.
+If you use `make paradigm` and the compilation is successful, you will see a lot of output from the created LSL outlet. Furthermore, the program will display a message with `Waiting fro LSL Stream: MyParadigmIncoming`. Use the python script provided under `./testing/run_incoming_lsl.py` to spawn such an LSL stream. This requires the `pylsl` module for python. Note that you can simply keep this running while you tryout modifications on the `c` code.
 
 ## What you should see
 
@@ -67,11 +65,11 @@ If you use `make run` and the compilation is successful, you will see a lot of o
 
 ## Explaining the example
 
-A good first start would be to look into `./src/test.c` which is an even simpler example of how a `png` can be rendered to a window using `SDL2`. Once you understood the general setup of starting a `window` a `renderer` and a `texture` and how to render that texture to the window, you can look into `./src/main.c` which extends this using multiple `textures` and adds both an LSL inlet and outlet.
+A good first start would be to look into `./src/examples/test.c` which is an even simpler example of how a `png` can be rendered to a window using `SDL2`. Once you understood the general setup of starting a `window` a `renderer` and a `texture` and how to render that texture to the window, you can look into `./src/main.c` which extends this using multiple `textures` and adds both an LSL inlet and outlet.
 
 ### main.c
 
-The following will walk you through to the core parts of the `./src/main.c` file. It was chosen to use a single file for highlighting the simplicity of the example. However, it is recommended to split the code into multiple files for a more complex implementation.
+The following will walk you through to the core parts of the `./src/examples/main_paradigm.c` file. It was chosen to use a single file for highlighting the simplicity of the example. However, it is recommended to split the code into multiple files for a more complex implementation.
 
 #### Necessary imports
 
@@ -215,3 +213,58 @@ Finally, we start the main loop of our program. It draws textures on every itera
 The `if` statement is also the basic core of how a closed-loop paradigm could be realized within the Dareplane platform. The conditional handling at this place could be extended arbitrary other markers, e.g. for early stopping, presenting a decoding result, etc.
 
 The rest is just for tracking frame rates and cleaning up. Please note that this strawmen is using `SDL_GetTicks` which is only accurate up to `1ms`. There is a more accurate performance counter if necessary.
+
+## Ready for the server?
+
+**Note**: Such a server could also be realized in python, which would then call the compiled `c` code in `./bin/main_paradigm` as a subprocess.
+
+#### Starting with an echo server
+
+Again, lets focus on a simple task first, which is implementing an echo server (just sends back the incoming message to the client). You can find an example under `./src/examples/echo_server.c`, which you can compile and run using `make echo`.
+Once the server is built and you are running it, you should see the following:
+
+```bash
+gcc -L/opt/homebrew/lib/ obj/echo_server.o -llsl -lSDL2 -lSDL2_image -lSDL2_ttf -o bin/echo_server
+bin/echo_server
+Server information: 127.0.0.1
+Server ai_socktype: 1
+Server ai_protocol: 6
+Server ai_family: 2
+Bound to:
+Listening on port 8081
+
+```
+
+Use `telnet 127.0.0.1 8081` for a quick test of the functionality. Sending `CLOSE` to the server should stop it.
+
+#### Combining the paradigm with a server
+
+Now to the code which is in `./src`. We have a `main.c` and two files providing functionality in `paradigm.c` and `server.c`. The code in `paradigm.c` is almost one for one from the `./src/examples/main_paradigm.c` example. The paradigm will be run in the main thread (see how it is invoked in `./src/main.c`). The server however will be run in a thread which we spawn using `SDL_CreateThread()`. Having this separated in two concurrent threads allows us to interrupt the paradigm by sending a `STOP` to the server. This interaction is realized by using a global variable `paradigm_stop_event` which is defined in `./src/paradigm.c`. For the purpose of this example we simply consider three states
+
+- 0: Run paradigm
+- 1: stop paradigm
+- -1: close server
+
+The server now changes the values of this int variable to control the paradigm. By sending primary commands (e.g. via telnet), we can use them. `START` -> `paradigm_stop_event = 0`, `STOP` -> `paradigm_stop_event = 1`, `CLOSE` -> `paradigm_stop_event = -1`.
+
+For testing the setup, you would want three command lines/terminals:
+
+```bash
+make server                                      # building and running the module
+```
+
+```bash
+python -m testing/run_incoming_lsl.py            # the incomming mockup stream
+```
+
+```bash
+telnet 127.0.0.1 8081                            # client for testing the primary command against the server (START, STOP, CLOSE)
+```
+
+#### Some considerations
+
+- SDL should also run in the main thread [see discussion](https://discourse.libsdl.org/t/can-i-use-sdl-in-a-new-thread-not-the-main-thread/31921)
+
+## Trouble shooting
+
+The `compile_flags.txt` only servers to provide information for the `clangd` LSP. In case you get error about unknown header files, you might want to adjust it for your system.
